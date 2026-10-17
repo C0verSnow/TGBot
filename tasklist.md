@@ -11,6 +11,7 @@
 - 补齐变量示例、中文准备清单、远端 CI、Vercel 部署及 Webhook 注册工作流。
 - Python 静态语法、JSON 格式及差异检查通过，没有执行本地构建、编译或测试运行。
 - GitHub 远端 CI 的 11 项模拟测试全部通过：https://github.com/C0verSnow/TGBot/actions/runs/39017219009 。
+- 已按 issue 要求关闭 issue #1，代码与文档在 PR #2 中交付，生产配置和真实验收仍需按准备清单完成。
 - 已提交 PR #2：https://github.com/C0verSnow/TGBot/pull/2 。PR 保持打开，供审核，不直接合并。
 
 ## 没做：
@@ -18,4 +19,4 @@
 - 按仓库约定，不进行本地编译验证；测试仅在 GitHub 上运行。
 
 ## 在做：
-- 确认最终提交的远端 CI 结果，并按 issue 的要求关闭 issue #1。
+- 无。
