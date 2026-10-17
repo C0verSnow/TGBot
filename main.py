@@ -6,6 +6,7 @@ import re
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib import request
+from urllib.error import HTTPError
 
 ROOT = Path(__file__).resolve().parent
 COMMANDS = {"/dockerstart": "start", "/dockerstop": "stop"}
@@ -126,6 +127,11 @@ class handler(BaseHTTPRequestHandler):
             return
         try:
             process_update(update)
+        except HTTPError as error:
+            # Never include the URL, headers or response body: bot URLs contain tokens.
+            print(f"Webhook upstream request failed; HTTP status {error.code}.")
+            self.reply(503, {"ok": False})
+            return
         except Exception:
             # Never log exceptions containing bot URLs, tokens, or remote output.
             print("Webhook processing failed; check service configuration and availability.")

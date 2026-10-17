@@ -19,4 +19,12 @@
 - 按仓库约定，不进行本地编译验证；测试仅在 GitHub 上运行。
 
 ## 在做：
-- 无。
+- 2026-10-17：通过 Chrome 确认 main 最新提交为 a01e73f，CI #8 成功；已有部署 #1 失败（https://github.com/C0verSnow/TGBot/actions/runs/39024546847），原因是 production 的 VERCEL_CLI_VERSION 填成 latest，未通过固定版本号检查，部署和 Webhook 注册被跳过。
+- 已查看 Vercel 官方发布页，选定具体版本 58.4.4；尝试保存时 GitHub 提示 Re-authentication required，尚未保存成功，已请用户完成身份验证。继续检查线上入口，用户已补充机器人用户名为 @GatebyTroy_bot；再次刷新确认版本号仍为 latest，等待 GitHub 身份验证完成及允许停机验收的说明。
+- 浏览器打开 https://tgbot1-chi.vercel.app/webhook 返回 {"ok": true}，入口可以访问；这只证明 HTTP 入口可用，尚未证明 Telegram、Actions 和服务器控制链路通过。
+- 本次未读取或输出 .env 密钥，未进行本地构建、编译或测试运行。
+
+- 2026-10-17 继续验收：用户确认已保存 CLI 58.4.4，明确要求先停止再启动；浏览器核对版本已生效，已重跑 main 提交 a01e73f 的部署任务 #1，等待远端结果。
+- 浏览器确认部署任务第 2 次尝试成功（远端测试、Vercel 部署、Webhook 注册均成功，31 秒）；按用户要求改用 Telegram 网页端，在 @GatebyTroy_bot 私聊于 06:29 EDT 发送 /dockerstop，等待执行结果，随后再启动。
+- 停止命令触发 Telegram 重试，Vercel 日志多次出现 POST /webhook 503，GitHub 控制任务仍为 0；尚未确认容器停止，未发送启动命令。用户确认仓库名、main 分支和派发 Token 的 Actions 读写权限。
+- 为定位故障，只增加上游 HTTP 状态码日志，不输出 URL、请求头、响应体或 Token；补充日志脱敏测试，准备提交给远端 CI 执行。

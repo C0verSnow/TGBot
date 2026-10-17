@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+from urllib.error import HTTPError
 
 import main
 from scripts import remote_control, worker, set_webhook
@@ -89,6 +90,14 @@ class WebhookTests(unittest.TestCase):
         with patch("builtins.print") as output:
             self.assertEqual(self.request(b"{}").reply.call_args.args[0], 503)
             self.assertNotIn("private secret", str(output.call_args))
+
+    @patch("main.process_update")
+    def test_upstream_http_error_logs_only_status(self, process):
+        process.side_effect = HTTPError(
+            "https://example.com/private-token", 403, "private reason", {}, None)
+        with patch("builtins.print") as output:
+            self.assertEqual(self.request(b"{}").reply.call_args.args[0], 503)
+        output.assert_called_once_with("Webhook upstream request failed; HTTP status 403.")
 
 
 class RemoteTests(unittest.TestCase):
