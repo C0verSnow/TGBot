@@ -17,8 +17,30 @@ Go 路径不调用 GitHub API，也不派发控制任务。GitHub Actions 负责
 | `/help` | 返回命令说明 | 不需要 |
 | `/dockerstart` | 启动服务器预先固定的容器 | 需要 |
 | `/dockerstop` | 停止服务器预先固定的容器 | 需要 |
+| `/updatesecret` | 更新 Infisical 中已有的两个 Gate 密钥 | 需要 |
 
 群聊、频道、编辑消息、机器人消息都忽略；命令不能带参数。`/id` 仅返回发送者自己的 ID，不泄露白名单。
+
+## 私聊更新 Infisical 密钥
+
+仅 Go `/webhook-go` 支持。白名单用户发送 `/updatesecret`，收到提示后在 5 分钟内发送一条两行文本：
+
+```text
+GATE_API_KEY=新的API_KEY
+GATE_API_SECRET=新的API_SECRET
+```
+
+两个字段必须各出现一次，顺序可换；值不带引号、空格、换行或非 ASCII 字符，每项 1–512 字符。这里只验证输入格式，不调用 Gate 交易接口验证密钥是否有效或具有交易权限。普通命令仍可使用，不会作为密钥输入。
+
+Bot 尽快调用 `deleteMessage` 删除带字段名的原消息；等待期间的格式错误文本也会删除。删除失败就不开始新的更新，并提醒手动删除。Telegram 私聊机器人消息不具备端到端加密，删除不能撤回通知预览、截图或平台副本，不应把“已删除”理解为从未传输过。
+
+随后使用与 Orders3 一致的 Universal Auth 认证方式，按固定项目、环境、路径读取两个已有密钥，再分别 PATCH 更新并重新读取核对。不会创建缺失密钥，不提交注释、标签、名称或其他密钥配置。任一写入失败或验证不一致都不报成功。两次 PATCH 不是跨密钥事务，存在部分更新的可能；这时保留目标锁，由管理员核对后处理，不自动回滚或重试。
+
+Redis REST 是此功能必需的共享状态服务；只保存用户/聊天/消息编号、等待截止时间、固定结果提示和处理锁。原始消息、Gate 密钥、Infisical 令牌、Machine Identity 凭据均不入库、不记录日志。Lua 脚本原子领取消息，跨请求、跨实例、跨用户共享同一目标锁。重复 Webhook 重放固定结果，不重新写密钥；进程被强杀或结果记录失败时保留锁并报告结果待确认。事件和顺序记录不自动清理，防止旧消息重新生效；等待会在 5 分钟后逻辑失效。仅接收带有效消息时间且距接收不超过 5 分钟的输入。
+
+需要填写的六项 Infisical 变量和两项 Redis REST 变量、权限、开通步骤、解除不确定锁的方法见 [准备清单](准备清单.md)。没有配置 Redis 时，此命令安全失败，原来的 Docker 命令不依赖 Redis。此实现不读取 Supabase，也不修改其配置或数据库。
+
+接口依据：[Universal Auth](https://infisical.com/docs/api-reference/endpoints/universal-auth/login)、[读取已有密钥](https://infisical.com/docs/api-reference/endpoints/secrets/read)、[更新接口](https://infisical.com/docs/api-reference/endpoints/secrets/update)、[Redis REST](https://upstash.com/docs/redis/features/restapi)。
 
 ## 连接与安全
 

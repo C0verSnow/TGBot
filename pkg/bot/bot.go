@@ -18,7 +18,7 @@ import (
 	"github.com/C0verSnow/TGBot/pkg/allowlist"
 )
 
-const help = "/id：查看你的 Telegram 用户 ID\n/help：查看可用命令\n/dockerstart：启动固定容器（仅白名单）\n/dockerstop：停止固定容器（仅白名单）\n请私聊发送完整命令，不要带参数。"
+const help = "/id：查看你的 Telegram 用户 ID\n/help：查看可用命令\n/dockerstart：启动固定容器（仅白名单）\n/dockerstop：停止固定容器（仅白名单）\n/updatesecret：更新 Infisical 的两个 Gate 密钥（仅白名单）\n请私聊发送完整命令，不要带参数。"
 
 // Execute's empty action is a handshake-only probe; it must not open a session.
 type App struct {
@@ -28,12 +28,15 @@ type App struct {
 	Send                func(context.Context, int64, string) error
 	Execute             func(context.Context, string, int64) string
 	Check               func(context.Context) error
+	Secrets             *SecretFlow
+	Delete              func(context.Context, int64, int64) error
 }
 
 func Production() *App {
 	ids, err := ParseIDs(allowlist.Whitelist)
 	return &App{Secret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"), ProbeSecret: os.Getenv("TSNET_PROBE_SECRET"),
-		IDs: ids, PolicyErr: err, Send: telegram, Execute: execute, Check: probe}
+		IDs: ids, PolicyErr: err, Send: telegram, Execute: execute, Check: probe,
+		Secrets: productionSecrets(), Delete: telegramDelete}
 }
 
 func ParseIDs(text string) (map[int64]bool, error) {
@@ -55,6 +58,8 @@ func ParseIDs(text string) (map[int64]bool, error) {
 type Update struct {
 	ID      *int64 `json:"update_id"`
 	Message *struct {
+		ID   int64 `json:"message_id"`
+		Date int64 `json:"date"`
 		From *struct {
 			ID  int64 `json:"id"`
 			Bot bool  `json:"is_bot"`
@@ -111,6 +116,15 @@ func (a *App) Webhook(w http.ResponseWriter, r *http.Request) {
 	}
 	text := strings.TrimSpace(m.Text)
 	var result string
+	// Remove recognizable credentials even when the sender is unauthorized or
+	// their session has expired. Never send message contents to the state store.
+	sensitive := strings.Contains(m.Text, "GATE_API_KEY") || strings.Contains(m.Text, "GATE_API_SECRET")
+	deleted := true
+	if sensitive {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		deleted = a.Delete != nil && m.ID > 0 && a.Delete(ctx, m.Chat.ID, m.ID) == nil
+		cancel()
+	}
 	switch text {
 	case "/id":
 		result = fmt.Sprintf("你的 Telegram 用户 ID：%d", m.From.ID)
@@ -121,14 +135,23 @@ func (a *App) Webhook(w http.ResponseWriter, r *http.Request) {
 			result = "无权限执行此操作"
 		} else {
 			switch text {
+			case "/updatesecret":
+				result = a.secretMessage(r.Context(), m.From.ID, m.Chat.ID, *u.ID, m.ID, m.Date, text, deleted)
 			case "/dockerstart", "/dockerstop":
 				ctx, cancel := context.WithTimeout(r.Context(), 48*time.Second)
 				result = a.Execute(ctx, map[string]string{"/dockerstart": "start", "/dockerstop": "stop"}[text], *u.ID)
 				cancel()
 			default:
-				result = help
+				if sensitive || !strings.HasPrefix(text, "/") {
+					result = a.secretMessage(r.Context(), m.From.ID, m.Chat.ID, *u.ID, m.ID, m.Date, m.Text, deleted)
+				} else {
+					result = help
+				}
 			}
 		}
+	}
+	if sensitive && !deleted {
+		result += "\n原始消息删除未确认，请立即手动删除；本次不会开始新的密钥更新。"
 	}
 	// Even after execution expires, reserve time for the result notification.
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -169,12 +192,20 @@ func (a *App) Probe(w http.ResponseWriter, r *http.Request) {
 }
 
 func telegram(ctx context.Context, chat int64, text string) error {
+	return telegramCall(ctx, "sendMessage", map[string]any{"chat_id": chat, "text": text})
+}
+
+func telegramDelete(ctx context.Context, chat, message int64) error {
+	return telegramCall(ctx, "deleteMessage", map[string]any{"chat_id": chat, "message_id": message})
+}
+
+func telegramCall(ctx context.Context, method string, payload map[string]any) error {
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if token == "" {
 		return errors.New("notification failed")
 	}
-	body, _ := json.Marshal(map[string]any{"chat_id": chat, "text": text})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", bytes.NewReader(body))
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.telegram.org/bot"+token+"/"+method, bytes.NewReader(body))
 	if err != nil {
 		return errors.New("notification failed")
 	}
