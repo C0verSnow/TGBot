@@ -46,30 +46,22 @@ func connect(ctx context.Context) (*ssh.Client, func(), error) {
 	if !tailnetHost(host) || key == "" || hosts == "" || (auth == "" && oauth == "") {
 		return nil, nil, errors.New("configuration")
 	}
-	joinCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	auth, err := authKey(joinCtx, auth, oauth)
-	if err != nil {
-		return nil, nil, err
-	}
-	signer, err := ssh.ParsePrivateKey([]byte(key))
-	if err != nil {
-		return nil, nil, errors.New("configuration")
-	}
 	dir, err := os.MkdirTemp("", "tgbot-")
 	if err != nil {
 		return nil, nil, errors.New("temporary storage")
 	}
 	cleanup := func() { _ = os.RemoveAll(dir) }
-	path := filepath.Join(dir, "known_hosts")
-	if os.WriteFile(path, []byte(hosts+"\n"), 0600) != nil {
-		cleanup()
-		return nil, nil, errors.New("configuration")
-	}
-	verify, err := knownhosts.New(path)
+	config, err := sshConfiguration(dir, key, hosts)
 	if err != nil {
 		cleanup()
-		return nil, nil, errors.New("configuration")
+		return nil, nil, err
+	}
+	joinCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	auth, err = authKey(joinCtx, auth, oauth)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
 	}
 	server := &tsnet.Server{Dir: dir, Store: new(mem.Store), Hostname: filepath.Base(dir), Ephemeral: true,
 		AuthKey: auth, AdvertiseTags: []string{"tag:tgbot-ci"},
@@ -97,9 +89,7 @@ func connect(ctx context.Context) (*ssh.Client, func(), error) {
 	deadline, _ := ctx.Deadline()
 	_ = conn.SetDeadline(minDeadline(deadline, time.Now().Add(10*time.Second)))
 	stopClose := context.AfterFunc(ctx, func() { _ = conn.Close() })
-	c, chans, reqs, err := ssh.NewClientConn(conn, addr, &ssh.ClientConfig{
-		User: "deploy", Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, HostKeyCallback: verify,
-	})
+	c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
 	if err != nil {
 		stopClose()
 		_ = conn.Close()
@@ -112,6 +102,22 @@ func connect(ctx context.Context) (*ssh.Client, func(), error) {
 	cleanup = func() { stopClose(); _ = client.Close(); closeServer() }
 	return client, cleanup, nil
 }
+func sshConfiguration(dir, key, hosts string) (*ssh.ClientConfig, error) {
+	signer, err := ssh.ParsePrivateKey([]byte(key))
+	if err != nil {
+		return nil, errors.New("SSH private key configuration")
+	}
+	path := filepath.Join(dir, "known_hosts")
+	if os.WriteFile(path, []byte(hosts+"\n"), 0600) != nil {
+		return nil, errors.New("SSH host configuration")
+	}
+	verify, err := knownhosts.New(path)
+	if err != nil {
+		return nil, errors.New("SSH host configuration")
+	}
+	return &ssh.ClientConfig{User: "deploy", Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, HostKeyCallback: verify}, nil
+}
+
 func minDeadline(a, b time.Time) time.Time {
 	if a.IsZero() || b.Before(a) {
 		return b

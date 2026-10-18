@@ -15,6 +15,9 @@ import (
 // Mint a single-use ephemeral auth key with request cancellation. tsnet's built-in
 // OAuth path uses a server lifetime context during synchronous Start instead.
 func authKey(ctx context.Context, key, secret string) (string, error) {
+	if key != "" && secret != "" {
+		return "", errors.New("choose one Tailnet credential")
+	}
 	if key != "" {
 		if !strings.HasPrefix(key, "tskey-auth-") {
 			return "", errors.New("invalid auth key")

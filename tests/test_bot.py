@@ -177,3 +177,14 @@ class WorkerTests(unittest.TestCase):
         set_webhook.main()
         self.assertEqual(post.call_args.args[1]["secret_token"], "a" * 64)
         self.assertFalse(post.call_args.args[1]["drop_pending_updates"])
+
+
+class MigrationWebhookTests(unittest.TestCase):
+    @patch.dict(os.environ, {"WEBHOOK_URL": "https://example.com/webhook-go",
+                             "TELEGRAM_WEBHOOK_SECRET": "a" * 64,
+                             "TELEGRAM_BOT_TOKEN": "token"})
+    @patch("scripts.set_webhook.post_json", return_value={"ok": True})
+    def test_go_url_supported_without_dropping_pending(self, post):
+        set_webhook.main()
+        self.assertEqual(post.call_args.args[1]["url"], "https://example.com/webhook-go")
+        self.assertFalse(post.call_args.args[1]["drop_pending_updates"])
