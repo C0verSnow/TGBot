@@ -16,6 +16,7 @@ import (
 )
 
 const secretPrompt = "请在 5 分钟内用一条消息提交以下两行（不带引号）：\nGATE_API_KEY=新的API_KEY\nGATE_API_SECRET=新的API_SECRET\n格式检查不代表交易所验证。消息删除失败时不会开始更新。"
+const secretCopyTemplate = "GATE_API_KEY=\nGATE_API_SECRET="
 const secretExpired = "未在等待密钥，或等待已过期；请重新发送 /updatesecret。"
 const secretWorking = "该消息已领取处理，结果尚未确认；请管理员核对状态，不会自动重复更新。"
 const secretLocked = "目标密钥正在更新或上次结果未确认；请稍后重试，持续出现时请管理员核对更新锁。"
@@ -60,7 +61,7 @@ func (a *App) secretMessage(parent context.Context, user, chat, update, message,
 	digest := sha256.Sum256([]byte(strings.TrimRight(f.Infisical.URL, "/") + "\x00" + f.Infisical.Project + "\x00" + f.Infisical.Environment + "\x00" + f.Infisical.Path))
 	q := stateRequest{Scope: hex.EncodeToString(digest[:]), User: user, Chat: chat, Update: update, Message: message, Op: "peek"}
 	// Bound replay eligibility as well as session expiry; reject undated or stale
-	// secret messages. Existing event records never expire automatically.
+	// secret messages. Only safely completed events expire automatically.
 	if message <= 0 || date <= 0 || date > f.Now().Unix()+30 || f.Now().Unix()-date > 300 {
 		return "消息已过期或缺少有效时间；请重新发送 /updatesecret 并提交新消息。"
 	}
@@ -143,9 +144,9 @@ func (s *redisState) call(ctx context.Context, q stateRequest) (stateResponse, e
 	if !safeHTTPS(s.URL) || s.Key == "" {
 		return result, errors.New("state configuration")
 	}
-	// All three keys share a hash slot, so the script is atomic on clustered Redis.
+	// All four keys share a hash slot, so the script is atomic on clustered Redis.
 	prefix := "tgbot:{" + q.Scope + "}:"
-	args := []any{"EVAL", redisSecretScript, 3, prefix + "session:" + intString(q.User) + ":" + intString(q.Chat), prefix + "event:" + intString(q.Update), prefix + "lock", q.Op, intString(q.User), intString(q.Chat), intString(q.Update), intString(q.Message), q.Result, strconv.FormatBool(q.Uncertain)}
+	args := []any{"EVAL", redisSecretScript, 4, prefix + "session:" + intString(q.User) + ":" + intString(q.Chat), prefix + "event:" + intString(q.Update), prefix + "lock", prefix + "order:" + intString(q.User) + ":" + intString(q.Chat), q.Op, intString(q.User), intString(q.Chat), intString(q.Update), intString(q.Message), q.Result, strconv.FormatBool(q.Uncertain)}
 	body, _ := json.Marshal(args)
 	req, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(s.URL, "/"), bytes.NewReader(body))
 	if err != nil {

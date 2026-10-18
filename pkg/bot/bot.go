@@ -192,7 +192,13 @@ func (a *App) Probe(w http.ResponseWriter, r *http.Request) {
 }
 
 func telegram(ctx context.Context, chat int64, text string) error {
-	return telegramCall(ctx, "sendMessage", map[string]any{"chat_id": chat, "text": text})
+	payload := map[string]any{"chat_id": chat, "text": text}
+	if text == secretPrompt {
+		payload["reply_markup"] = map[string]any{"inline_keyboard": [][]any{{
+			map[string]any{"text": "📋 一键复制密钥模板", "copy_text": map[string]string{"text": secretCopyTemplate}},
+		}}}
+	}
+	return telegramCall(ctx, "sendMessage", payload)
 }
 
 func telegramDelete(ctx context.Context, chat, message int64) error {

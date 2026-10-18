@@ -101,6 +101,45 @@ func TestNotificationFailureReturnsRetryAndNoSecrets(t *testing.T) {
 		t.Fatal("token in error")
 	}
 }
+
+func TestTelegramCopyTemplateOnlyOnSecretPrompt(t *testing.T) {
+	t.Setenv("TELEGRAM_BOT_TOKEN", "fixture-token")
+	for _, text := range []string{secretPrompt, help, secretExpired, secretLocked, "普通通知"} {
+		mockHTTP(t, func(r *http.Request) (*http.Response, error) {
+			var data struct {
+				Chat   int64  `json:"chat_id"`
+				Text   string `json:"text"`
+				Markup *struct {
+					Rows [][]struct {
+						Text string `json:"text"`
+						Copy struct {
+							Text string `json:"text"`
+						} `json:"copy_text"`
+						Callback *string `json:"callback_data"`
+					} `json:"inline_keyboard"`
+				} `json:"reply_markup"`
+			}
+			if json.NewDecoder(r.Body).Decode(&data) != nil || data.Chat != 123 || data.Text != text || !strings.HasSuffix(r.URL.Path, "/sendMessage") {
+				t.Fatal("invalid Telegram request")
+			}
+			if text == secretPrompt {
+				if data.Markup == nil || len(data.Markup.Rows) != 1 || len(data.Markup.Rows[0]) != 1 {
+					t.Fatal("missing copy button")
+				}
+				button := data.Markup.Rows[0][0]
+				if button.Text != "📋 一键复制密钥模板" || button.Copy.Text != "GATE_API_KEY=\nGATE_API_SECRET=" || button.Callback != nil {
+					t.Fatal("incorrect copy template or callback")
+				}
+			} else if data.Markup != nil {
+				t.Fatal("unrelated reply has keyboard")
+			}
+			return response(200, `{"ok":true}`), nil
+		})
+		if err := telegram(context.Background(), 123, text); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 func TestSSHRejectsUnknownAndChangedHostKeys(t *testing.T) {
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
