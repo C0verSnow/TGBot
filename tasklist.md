@@ -5,6 +5,8 @@
 - 完成 issue #1，让白名单用户通过 Telegram 启停指定 Docker 容器。
 
 ## 做完：
+- 2026-10-17 最终收尾：main 提交 33e0bd8 的生产部署 dpl_DyyhSeVrqKAo28Xt9kJmWe4AwANA 已 Ready，正式域名确认指向该部署；合并后真实 /id 再次正确回复。main 远端 CI https://github.com/C0verSnow/TGBot/actions/runs/39094752019 全部通过。PR #4 已合并，issue #3 已关闭，Go 正式运行，容器最终为 true。临时 OIDC 文件已清理，没有进行本地编译验证。
+- 2026-10-17 23:45 EDT：最终提交 d26ac38 的两次远端 CI（39094532730、39094530210）均通过，PR #4 已按用户授权合并，main 提交为 33e0bd8；issue #3 自动关闭。本地 main 已同步。GitHub production 和本地 WEBHOOK_URL 已核对为 /webhook-go，本地重复但相同的私钥配置已整理成一份完整多行值，没有输出密钥。
 - 2026-10-17 PR #4 实际验收完成：修复 Vercel 模块冲突和 SSH 主机算法协商；远端 CI 全部通过，单次、重复、并发探针全部成功。Go 按用户要求使用 TS_AUTHKEY。真实 /id、/help 正常，带参数命令被拒绝；23:38 EDT 停止后用户确认 false，23:39 EDT 启动后用户确认 true，容器已恢复运行。Actions 控制任务保持 11，未中转控制；生产 Webhook 已为 /webhook-go，回滚入口保留。
 - 2026-10-17 issue #3 代码阶段：在 feature/issue-3-go-tsnet 实现 Go + tsnet 直连、/id、/help、请求内临时 OAuth 入网、严格 SSH 主机公钥校验、独立登录探针、超时和结果不确定提示。复用原服务器强制命令与 SQLite，旧 Python 生产入口和回滚链路保留。
 - 代码提交 e171b5b 的远端 CI 全部通过：Python 测试、Go 安全测试和 race、gofmt、go vet、Linux 构建，https://github.com/C0verSnow/TGBot/actions/runs/39089837592 。没有执行本地编译或测试，只做本地格式、静态语法、JSON 和差异检查。
@@ -75,4 +77,4 @@
 - 按仓库约定，不进行本地编译验证；测试仅在 GitHub 上运行。
 
 ## 在做：
-- 按用户授权收尾：提交验收文档，等待最终提交远端 CI，然后合并 PR #4、关闭 issue #3，核对 main 最终部署。
+- 无。本次 PR、真实验收和正式上线已完成；上方保留处理过程。
