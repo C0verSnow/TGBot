@@ -107,8 +107,8 @@ func TestTelegramCopyTemplateOnlyOnSecretPrompt(t *testing.T) {
 	for _, text := range []string{secretPrompt, help, secretExpired, secretLocked, "普通通知"} {
 		mockHTTP(t, func(r *http.Request) (*http.Response, error) {
 			var data struct {
-				Chat int64  `json:"chat_id"`
-				Text string `json:"text"`
+				Chat   int64  `json:"chat_id"`
+				Text   string `json:"text"`
 				Markup *struct {
 					Rows [][]struct {
 						Text string `json:"text"`
