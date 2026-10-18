@@ -5,6 +5,10 @@
 - 完成 issue #1，让白名单用户通过 Telegram 启停指定 Docker 容器。
 
 ## 做完：
+- 2026-10-17 issue #3 代码阶段：在 feature/issue-3-go-tsnet 实现 Go + tsnet 直连、/id、/help、请求内临时 OAuth 入网、严格 SSH 主机公钥校验、独立登录探针、超时和结果不确定提示。复用原服务器强制命令与 SQLite，旧 Python 生产入口和回滚链路保留。
+- 代码提交 e171b5b 的远端 CI 全部通过：Python 测试、Go 安全测试和 race、gofmt、go vet、Linux 构建，https://github.com/C0verSnow/TGBot/actions/runs/39089837592 。没有执行本地编译或测试，只做本地格式、静态语法、JSON 和差异检查。
+- 远端生成的 go.mod、go.sum 已校验 artifact SHA256 后提交；提交草稿 PR #4：https://github.com/C0verSnow/TGBot/pull/4 。README、准备清单、变量示例和旧版说明已更新。
+
 - 最终核对：用户在服务器执行 docker inspect，确认 orders-dashboard 的 Running 为 true。带多余参数的 /dockerstart other-container 被拒绝并提示正确用法，GitHub 控制任务总数保持 6，没有新增操作任务。启停链路验收完成，容器最终保持运行。
 - 2026-10-17 本次部署验收：已生成并保存最小权限的 Tailscale OAuth 凭据，修正 GitHub 和本地 .env 的服务器主机公钥，重新保存原专用私钥的正确多行格式。
 - 用户完成 root 安装后，确认服务器控制脚本的属主、权限和内容正确；专用 SSH 公钥已限制为只能启停 orders-dashboard。
@@ -20,11 +24,14 @@
 - 已提交 PR #2：https://github.com/C0verSnow/TGBot/pull/2 。PR 保持打开，供审核，不直接合并。
 
 ## 没做：
+- issue #3：用户说 Preview 变量晚点配置，已把所有配置项和验证步骤写入准备清单。本次未部署验证 Vercel 入网、冷启动、并发、资源限制或真实 Docker 启停；未切换生产 Webhook，未合并 PR。没有把 Go 版标为可投入生产，issue #3 保持打开，等后续实际验收完成再关闭。
+
 - 首次交付时未进行真实部署；本次已补齐 OAuth、SSH 主机公钥和服务器限制入口，真实启停结果见下面的新记录。
 - 本次未使用其他账号复验非白名单拒绝，也未故意更改线上主机公钥来制造故障。
 - 按仓库约定，不进行本地编译验证；测试仅在 GitHub 上运行。
 
 ## 在做：
+- issue #3 本次代码工作已交付，等待用户按准备清单配置 Preview 后继续实际验收。下方保留处理过程。
 - issue #3：Go 入口、临时 tsnet、请求内 OAuth、严格 SSH、独立探针及 /id、/help 已实现；首轮远端 CI 已触发，Python 测试通过，Go 正在准备工具链。用户说明 Preview 变量晚点配置，已把配置表、探针步骤、切换与回滚写进准备清单；本次不切生产，也不做真实容器启停。
 - issue #3：已读取完整需求和现有实现，创建 feature/issue-3-go-tsnet；核对 Vercel 官方 Go Runtime 和 tsnet 生命周期。先保留 Python 生产入口，新增隔离的 Go 入口和无 Docker 操作的 SSH 探针。
 - 本次启动与启停链路验收已完成，当前没有等待中的操作；下方保留排查过程。
