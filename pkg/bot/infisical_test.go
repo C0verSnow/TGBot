@@ -221,6 +221,41 @@ func TestSensitiveWebhookDeletionAndAuthorization(t *testing.T) {
 	}
 }
 
+func TestMalformedPendingInputDeletion(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		deleted, validated := 0, 0
+		f := &SecretFlow{Infisical: &Infisical{URL: "https://example.com", ClientID: "id", ClientSecret: "secret", Project: "p", Environment: "prod", Path: "/"}, Now: func() time.Time { return time.Unix(1000, 0) }}
+		f.State = func(_ context.Context, q stateRequest) (stateResponse, error) {
+			if q.Op == "peek" {
+				return stateResponse{State: "waiting"}, nil
+			}
+			if q.Op != "invalid" {
+				t.Fatal("malformed input reached claim")
+			}
+			validated++
+			return stateResponse{State: "done", Result: q.Result}, nil
+		}
+		f.Update = func(context.Context, GateSecrets) (string, bool) {
+			t.Fatal("malformed input reached Infisical")
+			return "", false
+		}
+		a := &App{Secrets: f, Delete: func(context.Context, int64, int64) error {
+			deleted++
+			if fail {
+				return fmt.Errorf("private deletion error")
+			}
+			return nil
+		}}
+		result := a.secretMessage(context.Background(), 123, 123, 42, 7, 1000, "unlabeled-sensitive-value", true)
+		if deleted != 1 || (fail && validated != 0) || (!fail && validated != 1) {
+			t.Fatal("unsafe malformed-input handling")
+		}
+		if strings.Contains(result, "unlabeled-sensitive-value") || strings.Contains(result, "private deletion") {
+			t.Fatal("sensitive error echoed")
+		}
+	}
+}
+
 func TestRedisStateNeverTransmitsCredentials(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
