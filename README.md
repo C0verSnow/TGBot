@@ -1,39 +1,43 @@
 # TGBot
 
-通过 Telegram 私聊，用 `/dockerstart`、`/dockerstop` 控制一个预先配置的 Docker 容器。
+Go + tsnet 版本，处理 issue #3。已完成 Vercel 入网、SSH、并发探针和 Telegram 真实启停验收，用户独立确认容器已恢复运行。生产 Webhook 使用 `/webhook-go`，Go 按用户要求采用 `TS_AUTHKEY`。证据见 [验收记录](验收记录.md)，配置见 [准备清单](准备清单.md)。
 
 ```text
-Telegram → Vercel Python Webhook（验证密钥、用户白名单）
-         → GitHub Actions（再次检查白名单、临时加入 Tailscale）
-         → OpenSSH / deploy（检查服务器主机公钥、专用受限密钥）
-         → 固定 Docker 操作 → Telegram 最终结果
+Telegram → Vercel Go Function → 临时 tsnet 节点 → Tailnet SSH
+         → 现有受限 remote_control.py → 固定 Docker 容器 → Telegram
 ```
 
-从 [准备清单.md](准备清单.md) 开始。默认白名单为空，默认不会操作任何服务器。
+Go 路径不调用 GitHub API，也不派发控制任务。GitHub Actions 负责远端测试和部署；旧 Python `/webhook` 和控制 workflow 保留，供回滚。
 
-## 为什么这样连接
+## 命令
 
-Vercel 函数和 Actions runner 是两台独立机器，Actions 的 Tailscale 连接不能供 Vercel 使用。本项目把需要私网和 SSH 的工作交给短期 Actions runner，Vercel 只做有超时的 HTTPS 调用，不启动后台线程、不运行 Polling、不在请求内等待 Docker。Tailscale 官方提供 runner 加入 Tailnet 的 Action：[官方说明](https://tailscale.com/docs/solutions/connect-github-cicd-workflows-to-private-infrastructure-without-public-exposure)。
+| 私聊命令 | 作用 | 白名单 |
+| --- | --- | --- |
+| `/id` | 返回发送者自己的数字 ID | 不需要 |
+| `/help` | 返回命令说明 | 不需要 |
+| `/dockerstart` | 启动服务器预先固定的容器 | 需要 |
+| `/dockerstop` | 停止服务器预先固定的容器 | 需要 |
 
-这是一套异步控制方案：正常也可能等待几十秒至数分钟，Actions 排队时间没有保证。每发一条命令会使用 Actions 配额。需要秒级响应时，应换成 Tailnet 内常驻任务服务；本项目没有假装 Vercel 自带私网。
+群聊、频道、编辑消息、机器人消息都忽略；命令不能带参数。`/id` 仅返回发送者自己的 ID，不泄露白名单。
 
-## 安全边界与使用限制
+## 连接与安全
 
-- 只接受白名单用户的私聊原始消息；群聊、频道、编辑消息都忽略。
-- `X-Telegram-Bot-Api-Secret-Token` 使用常量时间比较；空配置拒绝请求。
-- 消息中不能指定容器名、命令参数或 Bash；服务器公钥必须事先从可信控制台取得。
-- Vercel 没有 SSH 私钥；Actions 用固定 `deploy` 用户和 RejectPolicy 验证主机。
-- 专用 SSH 公钥必须带强制命令及 `restrict`。服务器脚本从环境变量读取固定容器名，用参数列表执行 Docker，禁用 Shell。
-- 服务器 SQLite 持久记录 update_id，文件锁把重复消息检查和 Docker 执行串起来；Webhook 重试即使创建多个任务，也不会再次操作同一消息。不要删除 `~deploy/.local/state/tgbot`。数据库随消息数增长，应备份并监控磁盘。
-- 为避免崩溃后重复操作，先记录消息再执行 Docker。任务崩溃、超时或回复失败时，结果可能不确定；先查看真实容器状态，再发送新消息。重复消息提示仅表示已领取，不证明之前成功。
-- Actions 不保证不同消息的执行顺序；不要连续交替发送启动、停止，等上一条结果回来再发下一条。不配置会取消排队任务的 concurrency。
-- Telegram 通知失败、Actions 服务故障或配额耗尽可能导致收不到回复；以 Actions 日志和服务器实际状态为准。代码不输出原始异常、SSH 输出或 Token。
-- Docker 组基本等同宿主机管理员权限。仅给机器人专用密钥装受限入口，避免复用管理员密钥；有更严格隔离需求时应另行使用 rootless Docker。
+- Vercel 官方 Go Runtime，`api/go.go` 导出 Handler；`/webhook-go` 是新入口，`/webhook` 保留 Python 生产链路。
+- 白名单通过 Go embed 随函数打包。Webhook 密钥常量时间比较，空配置或损坏白名单拒绝请求，请求体最多 64 KiB。
+- 每次控制请求独立创建 ephemeral 节点、内存状态和临时目录，不依赖跨请求文件、连接或后台进程。请求完成关闭 SSH、tsnet 并清理目录；被平台强杀时依赖 ephemeral 节点过期清理，不保证瞬时消失。
+- OAuth 在请求超时上下文中申请单次使用的预批准 ephemeral 入网密钥，限定现有 `tag:tgbot-ci`。也可提供可重复使用的 ephemeral `TS_AUTHKEY`；两种方式只选一种。目标仅允许 Tailscale IPv4/IPv6，不使用公网或 LAN SSH 回退。
+- 专用 SSH 私钥和可信 known_hosts 在 Vercel 环境变量中保存，固定 deploy 用户、22 端口，不使用 agent，不跳过主机身份验证。服务端 restrict、强制命令和固定容器配置保持原样。
+- 服务器 SQLite 和文件锁继续负责持久去重。重复消息只表示已领取，不能证明之前成功。超时、非零退出、未知响应均不会报成功；连接中断后先查容器状态，再发送新命令。不要清理服务器去重数据库。
+- 控制执行共用 48 秒预算（入网含 OAuth 最多 20 秒、TCP 连接最多 10 秒），结果通知另留 5 秒；Vercel 函数配置 60 秒。真实单次、重复和双请求并发 SSH 探针均在 4.8–7.1 秒完成；尚未做长期负载测试或单独测量内存峰值。
+- 不提前 ACK，不在 HTTP 返回后执行工作。通知失败返回 503，让 Telegram 重试相同 update_id，由服务器去重防止重做。新消息之间没有顺序保证，等上一条结果再发下一条。
+- SSH 输出限制内存，不打印原始异常、Token、私钥、主机输出或上游响应体。`TS_NO_LOGS_NO_SUPPORT=true` 禁止 Tailscale 调试日志上传。
 
-## 文件和验证
+## 文件和远端验证
 
-`main.py` / `api/index.py` 是 Webhook；`scripts/worker.py` 是 Actions 执行器；`scripts/remote_control.py` 安装到服务器；`scripts/set_webhook.py` 注册 Webhook。`ci.yml` 不读取真实密钥，在远端运行自动测试；`deploy.yml` 在远端测试后使用 Vercel 远端构建部署；`docker-control.yml` 执行真实控制任务。
+`pkg/bot/` 包含鉴权、命令、Telegram HTTPS、OAuth 和 SSH；`api/probe.go` 的 `/tsnet-probe` 使用独立密钥，只做入网和 SSH 登录，不创建 SSH session，不执行 Docker。`scripts/remote_control.py` 保持现有服务器协议。
 
-遵守本仓库约定，不做本地构建、编译、测试运行。远端测试覆盖鉴权、命令限制、Webhook 重试、主机校验设置、SSH 错误、超时及消息去重，使用模拟服务，不会启停真实容器。真实端到端验收步骤见准备清单。
+CI 保留 Python 回滚测试和服务器去重测试，新增 Go 安全测试、race 检查、vet 和 Linux 构建。依赖元数据由远端生成后提交。按仓库约定不在本地编译或运行测试，只做格式和差异检查。
 
-依据：[Vercel Python 入口](https://vercel.com/docs/functions/runtimes/python)、[Telegram Webhook](https://core.telegram.org/bots/api#setwebhook)、[GitHub workflow dispatch](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)。
+手动运行现有部署工作流时，feature 分支只部署 Preview，不注册 Telegram Webhook；main 分支保留生产部署流程。本次已完成实际验收并启用 Go；后续更改仍须复验，失败则按准备清单回滚。不要用常驻服务器绕开 Vercel 兼容性问题。
+
+[旧版文档](旧版说明.md) 保留 Python 回滚方案。实现依据：[Vercel Go Runtime](https://vercel.com/docs/functions/runtimes/go)、[Tailscale tsnet](https://tailscale.com/docs/features/tsnet)、[固定版本 tsnet 源码](https://github.com/tailscale/tailscale/blob/v1.96.2/tsnet/tsnet.go)。

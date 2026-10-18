@@ -1,9 +1,15 @@
 # 本文档为4象限的任务清单，全文书写大白话
 
 ## 想做：
+- 2026-10-17：完成 issue #3，在独立 feature 分支实现 Go + tsnet，增加 /id、/help，远端测试、预览验证后提交 PR。
 - 完成 issue #1，让白名单用户通过 Telegram 启停指定 Docker 容器。
 
 ## 做完：
+- 2026-10-17 PR #4 实际验收完成：修复 Vercel 模块冲突和 SSH 主机算法协商；远端 CI 全部通过，单次、重复、并发探针全部成功。Go 按用户要求使用 TS_AUTHKEY。真实 /id、/help 正常，带参数命令被拒绝；23:38 EDT 停止后用户确认 false，23:39 EDT 启动后用户确认 true，容器已恢复运行。Actions 控制任务保持 11，未中转控制；生产 Webhook 已为 /webhook-go，回滚入口保留。
+- 2026-10-17 issue #3 代码阶段：在 feature/issue-3-go-tsnet 实现 Go + tsnet 直连、/id、/help、请求内临时 OAuth 入网、严格 SSH 主机公钥校验、独立登录探针、超时和结果不确定提示。复用原服务器强制命令与 SQLite，旧 Python 生产入口和回滚链路保留。
+- 代码提交 e171b5b 的远端 CI 全部通过：Python 测试、Go 安全测试和 race、gofmt、go vet、Linux 构建，https://github.com/C0verSnow/TGBot/actions/runs/39089837592 。没有执行本地编译或测试，只做本地格式、静态语法、JSON 和差异检查。
+- 远端生成的 go.mod、go.sum 已校验 artifact SHA256 后提交；提交草稿 PR #4：https://github.com/C0verSnow/TGBot/pull/4 。README、准备清单、变量示例和旧版说明已更新。
+
 - 最终核对：用户在服务器执行 docker inspect，确认 orders-dashboard 的 Running 为 true。带多余参数的 /dockerstart other-container 被拒绝并提示正确用法，GitHub 控制任务总数保持 6，没有新增操作任务。启停链路验收完成，容器最终保持运行。
 - 2026-10-17 本次部署验收：已生成并保存最小权限的 Tailscale OAuth 凭据，修正 GitHub 和本地 .env 的服务器主机公钥，重新保存原专用私钥的正确多行格式。
 - 用户完成 root 安装后，确认服务器控制脚本的属主、权限和内容正确；专用 SSH 公钥已限制为只能启停 orders-dashboard。
@@ -18,12 +24,21 @@
 - 已按 issue 要求关闭 issue #1，代码与文档在 PR #2 中交付，生产配置和真实验收仍需按准备清单完成。
 - 已提交 PR #2：https://github.com/C0verSnow/TGBot/pull/2 。PR 保持打开，供审核，不直接合并。
 
-## 没做：
-- 首次交付时未进行真实部署；本次已补齐 OAuth、SSH 主机公钥和服务器限制入口，真实启停结果见下面的新记录。
-- 本次未使用其他账号复验非白名单拒绝，也未故意更改线上主机公钥来制造故障。
-- 按仓库约定，不进行本地编译验证；测试仅在 GitHub 上运行。
 
-## 在做：
+- 2026-10-17 PR #4：23:38 EDT Telegram 回复容器停止成功；用户独立 docker inspect 确认 false。23:39 EDT 已发送一次 /dockerstart 恢复，等待回复及最终 true。停止后 Actions 控制任务仍为 11，未通过 Actions 中转。
+- 2026-10-17 PR #4：真实 Telegram /id 和 /help 均收到正确回复。已在 23:37 EDT 发送一次 /dockerstop，等待结果和用户服务器 docker inspect 核对，核对后再启动。Go 路径验收前 Actions 控制任务总数为 11。
+- 2026-10-17 PR #4：生产候选 dpl_7rtd4Uf6mbxyAT2rxhgWxmZ5CTB6 已 Ready，正式域名已确认指向该版本；旧、新入口 GET 均 200，未授权 Go Webhook 和未配置的生产探针均 403。Telegram 无积压，已注册 /webhook-go 并保持 max_connections=1，不丢弃消息；开始真实私聊验收。
+- 2026-10-17 PR #4：用户明确要求验收通过后合并并正式启用 Go。138204c 的远端 CI（39093791457、39093789233）成功；Preview 单次、重复、两个并发探针均 200，耗时 4.82、5.09、7.13、4.84 秒；未授权 Webhook/探针均 403。生产新变量已按 TS_AUTHKEY 配好，原 Webhook 无积压，原生产部署编号已记录，准备候选部署和真实 Telegram 验收。
+- 2026-10-17 PR #4：独立探针已定位为 SSH verification or authentication；使用同一 .env 专用私钥与可信主机公钥，经 LAN 只握手连接成功，未执行命令。发现 Go 默认先协商 ECDSA，配置只固定 Ed25519；修复为只协商目标主机已固定的公钥算法，并保留 known_hosts 严格校验。新增远端真实 SSH 握手回归测试，模拟服务器同时提供 ECDSA 和 Ed25519。
+- 2026-10-17 PR #4：提交 9447c82 的远端 CI（39093382815、39093380565）均通过；Vercel dpl_DjSaVxegqVW69dTKAuFP8tRVvvJ8 已 Ready。GET /api/go 与 /webhook-go 均 200，独立探针约 3.77 秒返回 503。尚未操作容器；增加只对已鉴权探针返回固定阶段名称的诊断头，禁止输出原始错误和密钥。
+- 2026-10-17 PR #4：Preview 已保存本分支专用的 8 项变量，用户指定 TS_AUTHKEY，已移除 Preview OAuth。通过已有 Vercel Token 获取本项目短期开发 OIDC 身份以访问受保护 Preview，未关闭部署保护。用户将在真实停止和启动后亲自 docker inspect 核对状态。
+- 2026-10-17 PR #4：首轮修复后远端发现 Vercel 把函数模块改名为 handler，Go internal 访问规则因此拒绝入口导入。改用 pkg 目录，并让远端回归检查同时模拟模块改名。用户指定 Go 采用 TS_AUTHKEY，已切换 Preview 配置，未改旧生产 OAuth。
+- 2026-10-17 PR #4：确认最新提交 e90e071 的远端 CI 成功，但 Vercel Preview 构建失败：根目录白名单包与生成的 main__vc__go__.go 冲突。把唯一白名单移动到 pkg/allowlist，Python 和 Go 共用该文件；新增远端生成入口编译回归检查。Preview 当前缺配置，优先使用已有 OAuth，避免与 TS_AUTHKEY 同时设置。
+- 2026-10-17 本次继续 PR #4：用户确认完成 Go + tsnet PR，并允许短暂停止 orders-dashboard 后启动恢复。先核对远端 PR、CI、Vercel Preview 配置和 SSH 探针，全部过程不做本地编译。
+- 2026-10-17：按用户要求通过浏览器核对准备清单所需配置，与本地 .env 同步；只记录变量名称和状态，不记录密钥，不切换生产、不运行本地编译。
+- issue #3 本次代码工作已交付，等待用户按准备清单配置 Preview 后继续实际验收。下方保留处理过程。
+- issue #3：Go 入口、临时 tsnet、请求内 OAuth、严格 SSH、独立探针及 /id、/help 已实现；首轮远端 CI 已触发，Python 测试通过，Go 正在准备工具链。用户说明 Preview 变量晚点配置，已把配置表、探针步骤、切换与回滚写进准备清单；本次不切生产，也不做真实容器启停。
+- issue #3：已读取完整需求和现有实现，创建 feature/issue-3-go-tsnet；核对 Vercel 官方 Go Runtime 和 tsnet 生命周期。先保留 Python 生产入口，新增隔离的 Go 入口和无 Docker 操作的 SSH 探针。
 - 本次启动与启停链路验收已完成，当前没有等待中的操作；下方保留排查过程。
 - 2026-10-17：通过 Chrome 确认 main 最新提交为 a01e73f，CI #8 成功；已有部署 #1 失败（https://github.com/C0verSnow/TGBot/actions/runs/39024546847），原因是 production 的 VERCEL_CLI_VERSION 填成 latest，未通过固定版本号检查，部署和 Webhook 注册被跳过。
 - 已查看 Vercel 官方发布页，选定具体版本 58.4.4；尝试保存时 GitHub 提示 Re-authentication required，尚未保存成功，已请用户完成身份验证。继续检查线上入口，用户已补充机器人用户名为 @GatebyTroy_bot；再次刷新确认版本号仍为 latest，等待 GitHub 身份验证完成及允许停机验收的说明。
@@ -51,3 +66,13 @@
 - 控制脚本已上传到 /home/deploy/tgbot-control.py，SHA256 与仓库脚本相同。deploy 无法免密 sudo，已请用户在服务器执行 sudo install -o root -g root -m 755 /home/deploy/tgbot-control.py /usr/local/lib/tgbot-control.py。安装完成前暂不配置会拦截日常命令的受限入口。
 - 用户确认已执行 sudo install；SSH 核对系统脚本为 root 所有、不可被普通用户修改，内容与仓库一致。已为原专用公钥设置 restrict 和固定 orders-dashboard 控制命令，原 authorized_keys 备份在 /home/deploy/.ssh/authorized_keys.before-tgbot。08:39 EDT 从 Telegram 发送 /dockerstop，收到结果后再启动恢复运行。
 - Telegram 正常启停链路已收到成功回复；用户随后独立确认最终 Running=true，多余参数拒绝验收也已完成。
+
+## 没做：
+- Go 版未做长期负载测试、内存峰值测量或平台强制终止测试；少量真实请求和真实启停已通过，证据见验收记录。
+
+- 首次交付时未进行真实部署；本次已补齐 OAuth、SSH 主机公钥和服务器限制入口，真实启停结果见下面的新记录。
+- 本次未使用其他账号复验非白名单拒绝，也未故意更改线上主机公钥来制造故障。
+- 按仓库约定，不进行本地编译验证；测试仅在 GitHub 上运行。
+
+## 在做：
+- 按用户授权收尾：提交验收文档，等待最终提交远端 CI，然后合并 PR #4、关闭 issue #3，核对 main 最终部署。

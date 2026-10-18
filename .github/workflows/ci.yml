@@ -16,3 +16,44 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Resolve pinned dependencies
+        run: go mod tidy
+      - name: Save dependency metadata for review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-dependencies
+          path: |
+            go.mod
+            go.sum
+      - name: Check formatting
+        run: test -z "$(gofmt -l api/*.go pkg/bot/*.go pkg/allowlist/*.go)"
+      - name: Test security boundaries and races
+        run: go test -race -timeout 3m ./...
+      - name: Static analysis
+        run: go vet ./...
+      - name: Build Linux functions
+        run: go build ./...
+      - name: Build with a generated root entrypoint like Vercel
+        run: |
+          cp go.mod "$RUNNER_TEMP/tgbot-go.mod"
+          trap 'rm -f main__vc__go__.go; cp "$RUNNER_TEMP/tgbot-go.mod" go.mod' EXIT
+          go mod edit -module handler
+          go mod edit -require github.com/C0verSnow/TGBot@v0.0.0
+          go mod edit -replace github.com/C0verSnow/TGBot=.
+          cat > main__vc__go__.go <<'GO'
+          package main
+          import _ "handler/api"
+          func main() {}
+          GO
+          go build -o "$RUNNER_TEMP/tgbot-vercel-wrapper" main__vc__go__.go
