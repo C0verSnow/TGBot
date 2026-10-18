@@ -1,4 +1,28 @@
 {
-  "functions": {"api/index.py": {"maxDuration": 30, "includeFiles": "idlist.md"}},
-  "rewrites": [{"source": "/webhook", "destination": "/api/index"}]
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 30,
+      "includeFiles": "idlist.md"
+    },
+    "api/go.go": {
+      "maxDuration": 60
+    },
+    "api/probe.go": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/webhook",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/webhook-go",
+      "destination": "/api/go"
+    },
+    {
+      "source": "/tsnet-probe",
+      "destination": "/api/probe"
+    }
+  ]
 }

@@ -11,7 +11,7 @@ from main import post_json, required
 def main():
     url = required("WEBHOOK_URL")
     parsed = urlsplit(url)
-    if (parsed.scheme != "https" or not parsed.hostname or parsed.path != "/webhook"
+    if (parsed.scheme != "https" or not parsed.hostname or parsed.path not in {"/webhook", "/webhook-go"}
             or parsed.username or parsed.password or parsed.query or parsed.fragment):
         raise ValueError("invalid webhook URL")
     secret = required("TELEGRAM_WEBHOOK_SECRET")

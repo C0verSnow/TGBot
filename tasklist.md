@@ -1,6 +1,7 @@
 # 本文档为4象限的任务清单，全文书写大白话
 
 ## 想做：
+- 2026-10-17：完成 issue #3，在独立 feature 分支实现 Go + tsnet，增加 /id、/help，远端测试、预览验证后提交 PR。
 - 完成 issue #1，让白名单用户通过 Telegram 启停指定 Docker 容器。
 
 ## 做完：
@@ -24,6 +25,7 @@
 - 按仓库约定，不进行本地编译验证；测试仅在 GitHub 上运行。
 
 ## 在做：
+- issue #3：已读取完整需求和现有实现，创建 feature/issue-3-go-tsnet；核对 Vercel 官方 Go Runtime 和 tsnet 生命周期。先保留 Python 生产入口，新增隔离的 Go 入口和无 Docker 操作的 SSH 探针。
 - 本次启动与启停链路验收已完成，当前没有等待中的操作；下方保留排查过程。
 - 2026-10-17：通过 Chrome 确认 main 最新提交为 a01e73f，CI #8 成功；已有部署 #1 失败（https://github.com/C0verSnow/TGBot/actions/runs/39024546847），原因是 production 的 VERCEL_CLI_VERSION 填成 latest，未通过固定版本号检查，部署和 Webhook 注册被跳过。
 - 已查看 Vercel 官方发布页，选定具体版本 58.4.4；尝试保存时 GitHub 提示 Re-authentication required，尚未保存成功，已请用户完成身份验证。继续检查线上入口，用户已补充机器人用户名为 @GatebyTroy_bot；再次刷新确认版本号仍为 latest，等待 GitHub 身份验证完成及允许停机验收的说明。
