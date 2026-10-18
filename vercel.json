@@ -2,7 +2,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 30,
-      "includeFiles": "internal/allowlist/idlist.md"
+      "includeFiles": "pkg/allowlist/idlist.md"
     },
     "api/go.go": {
       "maxDuration": 60

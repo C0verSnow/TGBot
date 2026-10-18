@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/C0verSnow/TGBot/internal/allowlist"
+	"github.com/C0verSnow/TGBot/pkg/allowlist"
 )
 
 const help = "/id：查看你的 Telegram 用户 ID\n/help：查看可用命令\n/dockerstart：启动固定容器（仅白名单）\n/dockerstop：停止固定容器（仅白名单）\n请私聊发送完整命令，不要带参数。"

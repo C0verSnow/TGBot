@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/C0verSnow/TGBot/internal/bot"
+	"github.com/C0verSnow/TGBot/pkg/bot"
 	"net/http"
 )
 

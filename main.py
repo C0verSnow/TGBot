@@ -21,7 +21,7 @@ def required(name):
 
 def whitelist(path=None):
     ids = set()
-    for line in (path or ROOT / "internal" / "allowlist" / "idlist.md").read_text(encoding="utf-8").splitlines():
+    for line in (path or ROOT / "pkg" / "allowlist" / "idlist.md").read_text(encoding="utf-8").splitlines():
         value = line.split("#", 1)[0].strip()
         if not value:
             continue

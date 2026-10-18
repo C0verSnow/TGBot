@@ -34,7 +34,7 @@ Go 路径不调用 GitHub API，也不派发控制任务。GitHub Actions 负责
 
 ## 文件和远端验证
 
-`internal/bot/` 包含鉴权、命令、Telegram HTTPS、OAuth 和 SSH；`api/probe.go` 的 `/tsnet-probe` 使用独立密钥，只做入网和 SSH 登录，不创建 SSH session，不执行 Docker。`scripts/remote_control.py` 保持现有服务器协议。
+`pkg/bot/` 包含鉴权、命令、Telegram HTTPS、OAuth 和 SSH；`api/probe.go` 的 `/tsnet-probe` 使用独立密钥，只做入网和 SSH 登录，不创建 SSH session，不执行 Docker。`scripts/remote_control.py` 保持现有服务器协议。
 
 CI 保留 Python 回滚测试和服务器去重测试，新增 Go 安全测试、race 检查、vet 和 Linux 构建。依赖元数据由远端生成后提交。按仓库约定不在本地编译或运行测试，只做格式和差异检查。
 
