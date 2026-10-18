@@ -16,7 +16,11 @@ if event then
 elseif op=='finish' then
   return redis.error_reply('event missing')
 end
-if op=='peek' then return response('missing') end
+if op=='peek' then
+  local session=redis.call('GET',KEYS[1])
+  if session and cjson.decode(session).expires>tonumber(redis.call('TIME')[1]) then return response('waiting') end
+  return response('missing')
+end
 if op=='finish' then
   if redis.call('GET',KEYS[3])~=update then return redis.error_reply('lock owner mismatch') end
   redis.call('SET',KEYS[2],cjson.encode({user=user,chat=chat,state='done',result=result}))

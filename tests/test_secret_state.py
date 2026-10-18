@@ -30,6 +30,7 @@ class SecretStateTests(unittest.TestCase):
 
     def test_duplicates_and_result_replay(self):
         self.assertEqual(self.call("begin", 10)["state"], "done")
+        self.assertEqual(self.call("peek", 11)["state"], "waiting")
         self.assertEqual(self.call("claim", 11)["state"], "claimed")
         self.assertEqual(self.call("claim", 11)["state"], "working")
         self.assertEqual(self.call("finish", 11, result="verified")["state"], "done")

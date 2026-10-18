@@ -78,6 +78,14 @@ func (a *App) secretMessage(parent context.Context, user, chat, update, message,
 		q.Op = "begin"
 		q.Result = secretPrompt
 	} else {
+		// While waiting, even malformed text can contain unlabeled credentials.
+		// Delete that input too, without deleting ordinary text outside a session.
+		if r.State == "waiting" && !strings.Contains(text, "GATE_API_KEY") && !strings.Contains(text, "GATE_API_SECRET") {
+			deleted = a.Delete != nil && a.Delete(ctx, chat, message) == nil
+			if !deleted {
+				return "删除消息失败：未开始密钥更新，请立即手动删除原消息。"
+			}
+		}
 		if !deleted {
 			return "删除消息失败：未开始密钥更新。"
 		}

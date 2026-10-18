@@ -21,3 +21,5 @@
 - [1792313420] 按用户最新要求撤销 Supabase 方案：删除未提交的 Supabase RPC、表结构与配置读取代码，恢复已授权的 Redis REST。此前只读检查，没有对 Supabase、Infisical 做写操作。
 
 - [1792313514] 已补 Redis 真服务并发回归、Infisical HTTP 边界及安全测试，并更新 README、环境变量样例和准备清单；实际密钥未写入文件，准备提交远端 CI。
+
+- [1792313581] 已创建 PR #6（https://github.com/C0verSnow/TGBot/pull/6），远端 Python 回归通过；Go race 和 Redis 实例测试运行中。复查补上等待期间不带字段名的错误输入删除，避免格式错误时残留敏感文本。
