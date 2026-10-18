@@ -20,9 +20,9 @@ class SecretStateTests(unittest.TestCase):
 
     def call(self, op, update, message=None, user=123, result="safe-result", uncertain=False):
         prefix = "tgbot:{test}:"
-        args = ["redis-cli", "--raw", "EVAL", self.script, "3",
+        args = ["redis-cli", "--raw", "EVAL", self.script, "4",
                 f"{prefix}session:{user}:{user}", f"{prefix}event:{update}",
-                f"{prefix}lock", op, str(user), str(user), str(update),
+                f"{prefix}lock", f"{prefix}order:{user}:{user}", op, str(user), str(user), str(update),
                 str(message if message is not None else update), result,
                 str(uncertain).lower()]
         output = subprocess.run(args, check=True, capture_output=True, text=True).stdout
@@ -73,3 +73,82 @@ class SecretStateTests(unittest.TestCase):
         value = 2**53 + 10
         self.call("begin", value)
         self.assertEqual(self.call("claim", value+1)["state"], "claimed")
+
+    def redis(self, *args):
+        return subprocess.run(["redis-cli", "--raw", *map(str, args)], check=True, capture_output=True, text=True).stdout.strip()
+
+    def ttl(self, suffix):
+        return int(self.redis("TTL", "tgbot:{test}:" + suffix))
+
+    def test_ttls_and_consumption(self):
+        self.call("begin", 10)
+        self.assertIn(self.ttl("session:123:123"), range(298, 301))
+        self.assertIn(self.ttl("event:10"), range(604798, 604801))
+        self.redis("EXPIRE", "tgbot:{test}:session:123:123", 250)
+        state = json.loads(self.redis("GET", "tgbot:{test}:session:123:123"))
+        state["expires"] -= 50
+        self.redis("SET", "tgbot:{test}:session:123:123", json.dumps(state), "EX", 250)
+        self.call("invalid", 11)
+        self.assertIn(self.ttl("session:123:123"), range(248, 251))
+        self.call("claim", 12)
+        self.assertEqual(self.ttl("session:123:123"), -2)
+        self.assertEqual(self.ttl("event:12"), -1)
+        self.assertEqual(self.ttl("lock"), -1)
+        self.call("finish", 12)
+        self.assertIn(self.ttl("event:12"), range(604798, 604801))
+        self.assertEqual(self.ttl("lock"), -2)
+
+    def test_uncertain_done_has_no_ttl(self):
+        self.call("begin", 10)
+        self.call("claim", 11)
+        self.call("finish", 11, uncertain=True)
+        self.assertEqual(self.ttl("event:11"), -1)
+        self.assertEqual(self.ttl("lock"), -1)
+
+    def test_order_survives_session_and_event_expiry(self):
+        self.call("begin", 10)
+        self.redis("DEL", "tgbot:{test}:session:123:123", "tgbot:{test}:event:10")
+        self.assertEqual(self.call("begin", 9)["state"], "expired")
+        self.assertEqual(self.call("begin", 11)["state"], "done")
+
+    def cleanup(self, kind, suffix, apply=True):
+        script = Path("scripts/redis_cleanup.lua").read_text(encoding="utf-8")
+        prefix = "tgbot:{test}:"
+        return self.redis("EVAL", script, 3, prefix + suffix, prefix + "lock", prefix + "order:123:123", kind, "apply" if apply else "dry-run")
+
+    def test_cleanup_migrates_legacy_session_without_losing_order(self):
+        self.call("begin", 10)
+        self.redis("DEL", "tgbot:{test}:order:123:123")
+        state = json.loads(self.redis("GET", "tgbot:{test}:session:123:123"))
+        state["expires"] = 1
+        self.redis("SET", "tgbot:{test}:session:123:123", json.dumps(state))
+        self.assertEqual(self.cleanup("session", "session:123:123", False), "expired-session")
+        self.assertEqual(self.ttl("session:123:123"), -1)
+        self.assertEqual(self.cleanup("session", "session:123:123"), "expired-session")
+        self.assertEqual(self.ttl("session:123:123"), -2)
+        self.redis("DEL", "tgbot:{test}:event:10")
+        self.assertEqual(self.call("begin", 9)["state"], "expired")
+        self.assertEqual(self.cleanup("session", "session:123:123"), "missing")
+
+    def test_cleanup_retains_ambiguous_events_and_protected_state(self):
+        for state in ({"state": "working"}, {"state": "done"}, {"state": "done", "completed_at": 1, "uncertain": True}, {"state": "done", "completed_at": "1", "uncertain": False}):
+            self.redis("SET", "tgbot:{test}:event:99", json.dumps(state))
+            self.assertEqual(self.cleanup("event", "event:99"), "retained")
+            self.assertEqual(self.ttl("event:99"), -1)
+        self.redis("SET", "tgbot:{test}:event:99", json.dumps({"state": "done", "completed_at": 1, "uncertain": False}))
+        self.redis("SET", "tgbot:{test}:lock", "99")
+        self.assertEqual(self.cleanup("event", "event:99"), "protected")
+        self.redis("DEL", "tgbot:{test}:lock")
+        self.assertEqual(self.cleanup("event", "event:99"), "expired-event")
+        self.assertEqual(self.ttl("event:99"), -2)
+
+    def test_cleanup_adds_ttl_without_extending_it(self):
+        self.call("begin", 10)
+        self.redis("PERSIST", "tgbot:{test}:session:123:123")
+        self.assertEqual(self.cleanup("session", "session:123:123"), "session-ttl")
+        self.assertIn(self.ttl("session:123:123"), range(298, 301))
+        self.redis("PERSIST", "tgbot:{test}:event:10")
+        self.assertEqual(self.cleanup("event", "event:10"), "event-ttl")
+        self.redis("EXPIRE", "tgbot:{test}:event:10", 100)
+        self.cleanup("event", "event:10")
+        self.assertIn(self.ttl("event:10"), range(98, 101))
