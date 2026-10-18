@@ -2,7 +2,9 @@ package bot
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/json"
 	"encoding/pem"
@@ -13,6 +15,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -112,7 +115,7 @@ func TestSSHRejectsUnknownAndChangedHostKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := "100.101.102.103:22"
-	config, err := sshConfiguration(t.TempDir(), string(pem.EncodeToMemory(block)), knownhosts.Line([]string{host}, signer.PublicKey()))
+	config, err := sshConfiguration(t.TempDir(), string(pem.EncodeToMemory(block)), knownhosts.Line([]string{host}, signer.PublicKey()), host)
 	if err != nil || config.User != "deploy" || len(config.Auth) != 1 {
 		t.Fatal("SSH configuration", err)
 	}
@@ -128,7 +131,7 @@ func TestSSHRejectsUnknownAndChangedHostKeys(t *testing.T) {
 	if config.HostKeyCallback("100.101.102.104:22", addr, signer.PublicKey()) == nil {
 		t.Fatal("unknown host accepted")
 	}
-	if _, err := sshConfiguration(t.TempDir(), "private fixture", "invalid"); err == nil || strings.Contains(err.Error(), "private fixture") {
+	if _, err := sshConfiguration(t.TempDir(), "private fixture", "invalid", host); err == nil || strings.Contains(err.Error(), "private fixture") {
 		t.Fatal("private key error disclosure")
 	}
 }
@@ -147,5 +150,65 @@ func TestFailClosedConfiguration(t *testing.T) {
 	a.Probe(res, req)
 	if res.Code != 403 {
 		t.Fatal("unconfigured probe allowed")
+	}
+}
+
+func TestSSHNegotiatesPinnedKeyWhenServerOffersECDSAFirst(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned, err := ssh.NewSignerFromKey(privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ecdsaKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := ssh.NewSignerFromKey(ecdsaKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, err := ssh.MarshalPrivateKey(privateKey, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	serverConfig := &ssh.ServerConfig{NoClientAuth: true}
+	serverConfig.AddHostKey(other)
+	serverConfig.AddHostKey(pinned)
+	result := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			result <- acceptErr
+			return
+		}
+		defer conn.Close()
+		_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+		server, _, _, handshakeErr := ssh.NewServerConn(conn, serverConfig)
+		if server != nil {
+			_ = server.Close()
+		}
+		result <- handshakeErr
+	}()
+	address := listener.Addr().String()
+	config, err := sshConfiguration(t.TempDir(), string(pem.EncodeToMemory(block)), knownhosts.Line([]string{address}, pinned.PublicKey()), address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Timeout = 3 * time.Second
+	client, err := ssh.Dial("tcp", address, config)
+	if err != nil {
+		t.Fatal("server's unpinned ECDSA key displaced the pinned Ed25519 key", err)
+	}
+	_ = client.Close()
+	if err := <-result; err != nil {
+		t.Fatal(err)
 	}
 }

@@ -51,7 +51,7 @@ func connect(ctx context.Context) (*ssh.Client, func(), error) {
 		return nil, nil, errors.New("temporary storage")
 	}
 	cleanup := func() { _ = os.RemoveAll(dir) }
-	config, err := sshConfiguration(dir, key, hosts)
+	config, err := sshConfiguration(dir, key, hosts, net.JoinHostPort(host, "22"))
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -102,7 +102,7 @@ func connect(ctx context.Context) (*ssh.Client, func(), error) {
 	cleanup = func() { stopClose(); _ = client.Close(); closeServer() }
 	return client, cleanup, nil
 }
-func sshConfiguration(dir, key, hosts string) (*ssh.ClientConfig, error) {
+func sshConfiguration(dir, key, hosts, address string) (*ssh.ClientConfig, error) {
 	signer, err := ssh.ParsePrivateKey([]byte(key))
 	if err != nil {
 		return nil, errors.New("SSH private key configuration")
@@ -115,7 +115,34 @@ func sshConfiguration(dir, key, hosts string) (*ssh.ClientConfig, error) {
 	if err != nil {
 		return nil, errors.New("SSH host configuration")
 	}
-	return &ssh.ClientConfig{User: "deploy", Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, HostKeyCallback: verify}, nil
+	addr, err := net.ResolveTCPAddr("tcp", address)
+	if err != nil {
+		return nil, errors.New("SSH host configuration")
+	}
+	// Negotiate only keys already pinned for this host. Go otherwise prefers
+	// ECDSA to Ed25519 even when known_hosts pins only the latter.
+	var algorithms []string
+	remaining := []byte(hosts)
+	for len(remaining) > 0 {
+		marker, _, publicKey, _, rest, parseErr := ssh.ParseKnownHosts(remaining)
+		if parseErr != nil {
+			return nil, errors.New("SSH host configuration")
+		}
+		remaining = rest
+		if marker != "" || verify(address, addr, publicKey) != nil {
+			continue
+		}
+		if publicKey.Type() == ssh.KeyAlgoRSA {
+			algorithms = append(algorithms, ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256)
+		} else {
+			algorithms = append(algorithms, publicKey.Type())
+		}
+	}
+	if len(algorithms) == 0 {
+		return nil, errors.New("SSH host configuration")
+	}
+	return &ssh.ClientConfig{User: "deploy", Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: verify, HostKeyAlgorithms: algorithms}, nil
 }
 
 func minDeadline(a, b time.Time) time.Time {

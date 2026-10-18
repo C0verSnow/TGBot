@@ -31,6 +31,7 @@
 - 按仓库约定，不进行本地编译验证；测试仅在 GitHub 上运行。
 
 ## 在做：
+- 2026-10-17 PR #4：独立探针已定位为 SSH verification or authentication；使用同一 .env 专用私钥与可信主机公钥，经 LAN 只握手连接成功，未执行命令。发现 Go 默认先协商 ECDSA，配置只固定 Ed25519；修复为只协商目标主机已固定的公钥算法，并保留 known_hosts 严格校验。新增远端真实 SSH 握手回归测试，模拟服务器同时提供 ECDSA 和 Ed25519。
 - 2026-10-17 PR #4：提交 9447c82 的远端 CI（39093382815、39093380565）均通过；Vercel dpl_DjSaVxegqVW69dTKAuFP8tRVvvJ8 已 Ready。GET /api/go 与 /webhook-go 均 200，独立探针约 3.77 秒返回 503。尚未操作容器；增加只对已鉴权探针返回固定阶段名称的诊断头，禁止输出原始错误和密钥。
 - 2026-10-17 PR #4：Preview 已保存本分支专用的 8 项变量，用户指定 TS_AUTHKEY，已移除 Preview OAuth。通过已有 Vercel Token 获取本项目短期开发 OIDC 身份以访问受保护 Preview，未关闭部署保护。用户将在真实停止和启动后亲自 docker inspect 核对状态。
 - 2026-10-17 PR #4：首轮修复后远端发现 Vercel 把函数模块改名为 handler，Go internal 访问规则因此拒绝入口导入。改用 pkg 目录，并让远端回归检查同时模拟模块改名。用户指定 Go 采用 TS_AUTHKEY，已切换 Preview 配置，未改旧生产 OAuth。
