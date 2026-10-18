@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	tgbot "github.com/C0verSnow/TGBot"
+	"github.com/C0verSnow/TGBot/internal/allowlist"
 )
 
 const help = "/id：查看你的 Telegram 用户 ID\n/help：查看可用命令\n/dockerstart：启动固定容器（仅白名单）\n/dockerstop：停止固定容器（仅白名单）\n请私聊发送完整命令，不要带参数。"
@@ -31,7 +31,7 @@ type App struct {
 }
 
 func Production() *App {
-	ids, err := ParseIDs(tgbot.Whitelist)
+	ids, err := ParseIDs(allowlist.Whitelist)
 	return &App{Secret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"), ProbeSecret: os.Getenv("TSNET_PROBE_SECRET"),
 		IDs: ids, PolicyErr: err, Send: telegram, Execute: execute, Check: probe}
 }

@@ -37,10 +37,19 @@ jobs:
             go.mod
             go.sum
       - name: Check formatting
-        run: test -z "$(gofmt -l api/*.go internal/bot/*.go whitelist.go)"
+        run: test -z "$(gofmt -l api/*.go internal/bot/*.go internal/allowlist/*.go)"
       - name: Test security boundaries and races
         run: go test -race -timeout 3m ./...
       - name: Static analysis
         run: go vet ./...
       - name: Build Linux functions
         run: go build ./...
+      - name: Build with a generated root entrypoint like Vercel
+        run: |
+          trap 'rm -f main__vc__go__.go' EXIT
+          cat > main__vc__go__.go <<'GO'
+          package main
+          import _ "github.com/C0verSnow/TGBot/api"
+          func main() {}
+          GO
+          go build -o "$RUNNER_TEMP/tgbot-vercel-wrapper" main__vc__go__.go

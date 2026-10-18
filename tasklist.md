@@ -31,6 +31,9 @@
 - 按仓库约定，不进行本地编译验证；测试仅在 GitHub 上运行。
 
 ## 在做：
+- 2026-10-17 PR #4：确认最新提交 e90e071 的远端 CI 成功，但 Vercel Preview 构建失败：根目录白名单包与生成的 main__vc__go__.go 冲突。把唯一白名单移动到 internal/allowlist，Python 和 Go 共用该文件；新增远端生成入口编译回归检查。Preview 当前缺配置，优先使用已有 OAuth，避免与 TS_AUTHKEY 同时设置。
+- 2026-10-17 本次继续 PR #4：用户确认完成 Go + tsnet PR，并允许短暂停止 orders-dashboard 后启动恢复。先核对远端 PR、CI、Vercel Preview 配置和 SSH 探针，全部过程不做本地编译。
+- 2026-10-17：按用户要求通过浏览器核对准备清单所需配置，与本地 .env 同步；只记录变量名称和状态，不记录密钥，不切换生产、不运行本地编译。
 - issue #3 本次代码工作已交付，等待用户按准备清单配置 Preview 后继续实际验收。下方保留处理过程。
 - issue #3：Go 入口、临时 tsnet、请求内 OAuth、严格 SSH、独立探针及 /id、/help 已实现；首轮远端 CI 已触发，Python 测试通过，Go 正在准备工具链。用户说明 Preview 变量晚点配置，已把配置表、探针步骤、切换与回滚写进准备清单；本次不切生产，也不做真实容器启停。
 - issue #3：已读取完整需求和现有实现，创建 feature/issue-3-go-tsnet；核对 Vercel 官方 Go Runtime 和 tsnet 生命周期。先保留 Python 生产入口，新增隔离的 Go 入口和无 Docker 操作的 SSH 探针。

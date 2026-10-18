@@ -1,4 +1,4 @@
-package tgbot
+package allowlist
 
 import _ "embed"
 
