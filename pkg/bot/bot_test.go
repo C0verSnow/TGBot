@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"strings"
@@ -115,5 +116,22 @@ func TestProbeAuthAndNoCommand(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatal(calls)
+	}
+}
+
+func TestProbeFailureStagesDoNotLeakErrors(t *testing.T) {
+	for _, value := range []string{"tailnet join", "private-token-sensitive-output"} {
+		a := &App{ProbeSecret: "probe", Check: func(context.Context) error { return errors.New(value) }}
+		req := httptest.NewRequest("POST", "/", nil)
+		req.Header.Set("X-TGBot-Probe-Secret", "probe")
+		res := httptest.NewRecorder()
+		a.Probe(res, req)
+		want := "connection"
+		if value == "tailnet join" {
+			want = value
+		}
+		if res.Code != 503 || res.Header().Get("X-TGBot-Probe-Stage") != want || strings.Contains(res.Body.String(), value) {
+			t.Fatal("probe diagnostic leaked an error or omitted its safe stage")
+		}
 	}
 }

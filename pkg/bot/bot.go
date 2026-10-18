@@ -151,7 +151,17 @@ func (a *App) Probe(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 48*time.Second)
 	defer cancel()
-	if a.Check(ctx) != nil {
+	if err := a.Check(ctx); err != nil {
+		// Only fixed stage labels reach the authenticated probe; never raw errors.
+		stage := "connection"
+		switch err.Error() {
+		case "configuration", "temporary storage", "SSH private key configuration", "SSH host configuration",
+			"choose one Tailnet credential", "invalid auth key", "invalid OAuth configuration",
+			"OAuth request", "OAuth authentication", "auth key request", "auth key creation",
+			"tailnet start", "tailnet join", "tailnet dial", "SSH verification or authentication":
+			stage = err.Error()
+		}
+		w.Header().Set("X-TGBot-Probe-Stage", stage)
 		reply(w, 503, false)
 		return
 	}
