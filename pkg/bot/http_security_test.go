@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -55,9 +56,9 @@ func TestRuntimeInspectionRequiresProbeSecretAndHasNoSideEffects(t *testing.T) {
 // Exercise real TLS verification using an isolated test CA and server.
 // A test-only transport rewrites endpoints; production transport is unchanged.
 func TestHTTPSClientsVerifyCertificates(t *testing.T) {
-	calls := 0
+	var calls atomic.Int32
 	s := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
+		calls.Add(1)
 		if r.Method != http.MethodPost {
 			t.Error("unexpected outbound method")
 		}
@@ -89,7 +90,7 @@ func TestHTTPSClientsVerifyCertificates(t *testing.T) {
 			return tr.RoundTrip(copy)
 		})
 		t.Cleanup(func() { http.DefaultTransport = old })
-		before := calls
+		before := calls.Load()
 		errTelegram := telegramCall(context.Background(), "sendMessage", map[string]any{"chat_id": 123, "text": "fixture"})
 		_, errOAuth := authKey(context.Background(), "", "tskey-client-fixture")
 		i := &Infisical{URL: s.URL, Client: boundedClient()}
@@ -99,20 +100,20 @@ func TestHTTPSClientsVerifyCertificates(t *testing.T) {
 				t.Fatal("TLS trust decision was not enforced")
 			}
 		}
-		if !trusted && calls != before {
+		if !trusted && calls.Load() != before {
 			t.Fatal("untrusted peer received application credentials")
 		}
-		if trusted && calls-before != 4 {
+		if trusted && calls.Load()-before != 4 {
 			t.Fatal("trusted TLS path did not complete")
 		}
 	}
 }
 
 func TestHTTPSClientsDoNotFollowRedirects(t *testing.T) {
-	redirects := 0
+	var redirects atomic.Int32
 	s := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/leak" {
-			redirects++
+			redirects.Add(1)
 		}
 		http.Redirect(w, r, "/leak", http.StatusTemporaryRedirect)
 	}))
@@ -136,7 +137,7 @@ func TestHTTPSClientsDoNotFollowRedirects(t *testing.T) {
 	if i.request(context.Background(), http.MethodPost, "/login", "", nil, nil) == nil {
 		t.Fatal("Infisical redirect accepted")
 	}
-	if redirects != 0 {
+	if redirects.Load() != 0 {
 		t.Fatal("credentials followed a redirect")
 	}
 }

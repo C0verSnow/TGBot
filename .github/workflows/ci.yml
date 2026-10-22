@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "23 6 * * 1"
+defaults:
+  run:
+    shell: bash
 permissions:
   contents: read
 jobs:
@@ -57,7 +60,9 @@ jobs:
           go env GOOS GOARCH GOTOOLCHAIN | tee security-results/go-environment.txt
           test "$(go env GOVERSION)" = "go$(awk '/^go / {print $2}' go.mod)"
       - name: Resolve pinned dependencies
-        run: go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
       - name: Verify downloaded modules
         run: go mod verify | tee security-results/mod-verify.txt
       - name: Save dependency metadata for review
@@ -96,6 +101,7 @@ jobs:
           go version -m "$(go env GOPATH)/bin/govulncheck" > security-results/scanner-version.txt
           govulncheck -mode=source -scan=module -json ./... > security-results/vuln-modules.json
           govulncheck -mode=source -json ./... > security-results/vuln-source.json
+          govulncheck ./... 2>&1 | tee security-results/vuln-summary.txt
       - name: Preserve security evidence even on failure
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -67,3 +67,9 @@ CI 保留 Python 回滚测试和服务器去重测试，新增 Go 安全测试�
 手动运行现有部署工作流时，feature 分支只部署 Preview，不注册 Telegram Webhook；main 分支保留生产部署流程。本次已完成实际验收并启用 Go；后续更改仍须复验，失败则按准备清单回滚。不要用常驻服务器绕开 Vercel 兼容性问题。
 
 [旧版文档](旧版说明.md) 保留 Python 回滚方案。实现依据：[Vercel Go Runtime](https://vercel.com/docs/functions/runtimes/go)、[Tailscale tsnet](https://tailscale.com/docs/features/tsnet)、[固定版本 tsnet 源码](https://github.com/tailscale/tailscale/blob/v1.96.2/tsnet/tsnet.go)。
+
+## Go 安全维护
+
+Go 最低版本为 **1.26.10**，CI 从 go.mod 安装并核对实际版本；Vercel 也从根 go.mod 选择工具链。HTTP/2 独立依赖 x/net 升级至 v0.60.0。按仓库约定不在本地编译或测试，使用远端 CI 的模块校验、race 测试、vet、构建与 govulncheck；每周自动复扫，失败报告也保存在 Actions artifact 中。
+
+生产升级必须重新部署后确认两个 Go 函数的构建日志；正确探针密钥下 `GET /tsnet-probe` 返回 `X-TGBot-Go-Version`，可检查运行二进制版本，不连接 Tailnet/SSH。原 POST 探针继续检查连接，不执行 Docker。凭据不要放进 URL 或公开日志。本次尚未核实生产工具链及 HTTP/2 终止边界，完整漏洞依据、测试范围及验收步骤见 [安全核查记录](SECURITY_REVIEW.md)。
