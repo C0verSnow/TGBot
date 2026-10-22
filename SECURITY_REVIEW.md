@@ -20,6 +20,14 @@
 | [CVE-2026-56866 / GO-2026-6605](https://pkg.go.dev/vuln/GO-2026-6605) | stdlib <1.26.9；1.27 预发行至 <1.27.2 | 触发要求带非空 Body 的 HTTP/1 CONNECT、非 2xx keep-alive 响应及连接池复用。Telegram/OAuth 固定 POST；Infisical 固定 GET/POST/PATCH；Redis REST 固定 POST。入站方法不透传到这些出站请求，也未在业务中创建 ReverseProxy。HTTPS 代理生成的建隧道 CONNECT 不携带业务 Body。 | 升级 Go；业务路径不满足所述带 Body CONNECT 条件。依赖和平台内部路径不能仅靠业务代码排除，仍扫描全模块。 |
 | [CVE-2026-78669 / GO-2026-6611](https://pkg.go.dev/vuln/GO-2026-6611) | stdlib <1.26.9；1.27 预发行至 <1.27.2；x/net <0.60.0 | 恶意 HTTP/2 对端打开大量流并频繁改变初始窗口，可能消耗客户端或服务端 CPU。出站 HTTPS 可协商 HTTP/2，所以不能只调查 Vercel 入站终止位置，也不能仅靠请求超时宣称无风险。 | 同时升级 Go 和 x/net。源码扫描给出可达性线索；实际对端、协议协商、并发条件仍取决于部署。 |
 
+## 升级同时覆盖的 SSH 风险
+
+本项目直接使用 `x/crypto/ssh`。官方数据库还列出 [GO-2026-6354 / CVE-2026-78662](https://pkg.go.dev/vuln/GO-2026-6354) 和 [GO-2026-6355 / CVE-2026-56855](https://pkg.go.dev/vuln/GO-2026-6355)：恶意 SSH 对端可能通过未建立或已建立通道的消息让连接死锁，均在 v0.56.0 修复，本次 v0.57.0 覆盖。`ssh.go` 会建立客户端连接及会话，因此保留该升级，不能仅靠已知主机密钥或超时忽略协议处理缺陷。
+
+[GO-2026-6303 / CVE-2026-56854](https://pkg.go.dev/vuln/GO-2026-6303) 在 v0.55.0 修复，涉及 SSH 服务端认证回调的 source-address 限制；本仓库业务实现 SSH 客户端，不提供这些服务端回调，依赖内路径以扫描为准。
+
+[GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) 是整个 x/crypto 模块中旧 OpenPGP 包的无修复版本警告，不能通过升级 SSH 依赖消除模块关联记录。业务不使用 OpenPGP；本次完整源码扫描确认未导入受影响包、未发现可达调用，不能把模块关联告警当成 SSH 漏洞，也不屏蔽扫描结果。
+
 ## 工具链与 Vercel 边界
 
 - 本机 PATH 没有 Go，`GOTOOLCHAIN=local go version` 返回 command not found。按仓库约定不安装工具链做本地编译、不跑本地测试。本机版本不是 1.26.10 的验证证据。
@@ -27,7 +35,7 @@
 - [Vercel 官方 Go 文档](https://vercel.com/docs/functions/runtimes/go#go-version)说明从根 go.mod 选择版本；本项目保留 `/api/*.go` 函数模式，不迁移框架。部署工作流在远端测试后交给 Vercel 远端构建，不能把 Actions 中的版本当成 Vercel 版本。
 - 本次连接能找到 `tgbot1` 项目，但读取其 production 部署时返回 403（团队范围未授权）。没有读取到生产构建日志，没有进行本次生产部署，也没有验证生产 Go 版本或平台的 HTTP/2 终止方式。
 - 为后续验收，`GET /tsnet-probe` 在正确 `X-TGBot-Probe-Secret` 下返回原有 `{"ok":true}` 结构和 `X-TGBot-Go-Version` 响应头。该请求不创建 Tailnet 节点、不登录 SSH；无密钥返回 403，不暴露版本。原 POST 探针继续只做连接验证，并携带版本头。版本来自 `runtime.Version()`，代表正在执行的 Go 二进制版本，不代表边缘代理版本。
-- 合并后先运行 feature Preview 远端部署，保存两个 Go 函数的构建日志及来源提交 SHA；用上述 GET 核对实际二进制版本，再执行已认证 POST 探针。正式发布时对 production 重复核对。不要把密钥放 URL、终端命令历史或公开日志；使用现有安全环境配置。Webhook GET 仅检查存活，不执行 Docker 或真实密钥更新。
+- 合并前先核对 feature Preview 远端部署，保存两个 Go 函数的构建日志及来源提交 SHA；用上述 GET 核对实际二进制版本，再执行已认证 POST 探针。正式发布时对 production 重复核对。不要把密钥放 URL、终端命令历史或公开日志；使用现有安全环境配置。Webhook GET 仅检查存活，不执行 Docker 或真实密钥更新。
 - 升级不会自动替换已上线的旧二进制。确认两个 Go 函数均由新工具链构建前，生产版本风险仍未结清。入站协议终止边界需要部署日志、运行时适配器源码或平台确认；公网协商到 HTTP/2 本身不能证明 Go 收到了 HTTP/2 帧。出站 TLS 证书验证在 Go 客户端执行。
 
 ## 远端检查与证据
@@ -43,3 +51,18 @@ CI 保留 Python 和真实 Redis 测试，Go job 执行版本核验、`go mod ti
 ## Preview 状态补充
 
 PR #10 的 [Vercel 自动评论](https://github.com/C0verSnow/TGBot/pull/10#issuecomment-6346774819)报告 `tgbot1` Preview Ready（提交 8e321e8），同时另一个绑定项目 `tg-bot` 为 Error。Ready 证明该 Preview 已生成，尚不能证明实际 Go 版本。访问 Preview 遇到平台登录保护，使用已连接 Vercel 的受保护 URL 读取工具仍返回 403；本机无 Vercel CLI，因此未完成运行期核对，也未取得另一个项目的错误日志。未修改任何项目的访问控制或生产设置。
+
+## 已完成的远端验证（2026-10-22）
+
+代码和 CI 提交 `2412d0075a98ca722c12a8cfc5f7165de1c17b09` 的 [CI #49](https://github.com/C0verSnow/TGBot/actions/runs/39822023865) 三个 job 全部通过。环境为 GitHub 托管 Ubuntu 24.04、linux/amd64，实际 `go version go1.26.10 linux/amd64`；通过精确版本核验、tidy 无差异、模块校验、格式检查、race 回归、vet、Linux 构建和模拟 Vercel 入口构建。Python 及真实 Redis 并发事务检查也通过。本次收尾仅更新文档，不改变上述已验证代码。
+
+扫描工具为 `golang.org/x/vuln v1.9.0`，自身也由 Go 1.26.10 构建。源码扫描结果为 **0 项可达漏洞、0 项已导入包漏洞、2 项仅模块关联告警**：
+
+| 告警 | 实际范围 | 本次处置 |
+| --- | --- | --- |
+| [GO-2026-5841](https://pkg.go.dev/vuln/GO-2026-5841) | 间接依赖 compress v1.18.2 的 `s2.NewDict` 处理恶意字典时可能越界读，v1.18.7 修复；本次扫描没有导入受影响 s2 包，也没有可达调用。 | 保留报告，不把它描述为已修复；本 PR 不扩大无关压缩依赖升级。后续依赖维护可升级至修复版本，若增加 s2 或字典输入必须重新评估。 |
+| [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) | x/crypto 内废弃的 OpenPGP 包没有修复版本；本次扫描未导入这些包，无可达调用。 | 保留 SSH 所需 x/crypto，禁止把该告警理解为所有 x/crypto 包都不安全；后续增加 OpenPGP 时使用维护中的实现并复扫。 |
+
+[原始安全报告](https://github.com/C0verSnow/TGBot/actions/runs/39822023865/artifacts/12445805646)包括模块 JSON、源码 JSON、扫描摘要、工具版本、Go 版本、环境、模块校验、测试及 vet 输出。已下载并核对 ZIP SHA256：`72762c0c5ff17604df5aa179eaa133a583667f10770af9374bf0250025188a09`。报告保留到 2026-11-21；过期后可用该提交重新触发 CI，结果将反映新的漏洞库。
+
+再次核对最新评论：`tgbot1` Preview Ready，`tg-bot` Error，没有人工 review 或行内待办。读取报错部署详情仍返回团队 scope 未授权的 403，事件接口返回 404，未取得错误原因；现有连接也没有提供返回信息建议的团队授权工具。不能据此认定错误来自本 PR，也不能认为两个项目都部署成功。生产二进制版本、Preview 运行版本和平台 HTTP/2 终止边界仍未验证；需由有该团队访问权限的账号查看部署日志及执行上述鉴权版本检查。未做生产发布或更改访问控制。
