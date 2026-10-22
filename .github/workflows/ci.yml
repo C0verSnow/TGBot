@@ -2,6 +2,9 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 6 * * 1"
 permissions:
   contents: read
 jobs:
@@ -36,7 +39,9 @@ jobs:
       - run: python -m unittest discover -s tests -v
   go:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -45,8 +50,16 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - name: Record actual toolchain
+        run: |
+          mkdir -p security-results
+          go version | tee security-results/go-version.txt
+          go env GOOS GOARCH GOTOOLCHAIN | tee security-results/go-environment.txt
+          test "$(go env GOVERSION)" = "go$(awk '/^go / {print $2}' go.mod)"
       - name: Resolve pinned dependencies
         run: go mod tidy
+      - name: Verify downloaded modules
+        run: go mod verify | tee security-results/mod-verify.txt
       - name: Save dependency metadata for review
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -57,9 +70,9 @@ jobs:
       - name: Check formatting
         run: test -z "$(gofmt -l api/*.go pkg/bot/*.go pkg/allowlist/*.go)"
       - name: Test security boundaries and races
-        run: go test -race -timeout 3m ./...
+        run: go test -race -v -timeout 3m ./... | tee security-results/go-test.txt
       - name: Static analysis
-        run: go vet ./...
+        run: go vet ./... 2>&1 | tee security-results/go-vet.txt
       - name: Build Linux functions
         run: go build ./...
       - name: Build with a generated root entrypoint like Vercel
@@ -75,3 +88,18 @@ jobs:
           func main() {}
           GO
           go build -o "$RUNNER_TEMP/tgbot-vercel-wrapper" main__vc__go__.go
+
+      - name: Scan module versions and reachable calls
+        if: ${{ !cancelled() }}
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go version -m "$(go env GOPATH)/bin/govulncheck" > security-results/scanner-version.txt
+          govulncheck -mode=source -scan=module -json ./... > security-results/vuln-modules.json
+          govulncheck -mode=source -json ./... > security-results/vuln-source.json
+      - name: Preserve security evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-security-results
+          path: security-results/
+          retention-days: 30
