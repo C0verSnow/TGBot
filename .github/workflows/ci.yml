@@ -99,7 +99,7 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           go version -m "$(go env GOPATH)/bin/govulncheck" > security-results/scanner-version.txt
-          govulncheck -mode=source -scan=module -json ./... > security-results/vuln-modules.json
+          govulncheck -mode=source -scan=module -json > security-results/vuln-modules.json
           govulncheck -mode=source -json ./... > security-results/vuln-source.json
           govulncheck ./... 2>&1 | tee security-results/vuln-summary.txt
       - name: Preserve security evidence even on failure

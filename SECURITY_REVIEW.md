@@ -6,7 +6,7 @@
 
 原声明 Go 1.26.1，改为 **Go 1.26.10**。它包含下表五项标准库修复；沿用 1.26 分支，避免无关的大版本迁移。官方依据：[Go 发布记录](https://go.dev/doc/devel/release#go1.26.10)、[Go 安全发布公告](https://groups.google.com/g/golang-announce/c/66pojueaQek)。
 
-`golang.org/x/net v0.48.0` 单独携带 HTTP/2 实现，也受影响，因此升级到 **v0.60.0**。其 go.mod 要求同步升级 x/crypto v0.57.0、x/sys v0.48.0、x/term v0.46.0、x/text v0.42.0，最终依赖和校验和由远端 Go 工具链整理。Tailscale 保持 v1.96.2，是否兼容以远端测试、构建和扫描结果为准。没有通过关闭 TLS、禁用 HTTP/2 或跳过鉴权来规避漏洞。
+`golang.org/x/net v0.48.0` 单独携带 HTTP/2 实现，也受影响，因此升级到 **v0.60.0**。其 go.mod 要求同步升级 x/crypto v0.57.0、x/sys v0.48.0、x/term v0.46.0、x/text v0.42.0、x/sync v0.23.0，最终依赖和校验和由远端 Go 工具链整理。Tailscale 保持 v1.96.2，是否兼容以远端测试、构建和扫描结果为准。没有通过关闭 TLS、禁用 HTTP/2 或跳过鉴权来规避漏洞。
 
 ## 五项漏洞逐项核查
 
@@ -39,3 +39,7 @@ CI 保留 Python 和真实 Redis 测试，Go job 执行版本核验、`go mod ti
 新增回归测试覆盖 CONNECT 拒绝、版本检查鉴权与无副作用、Telegram/OAuth/Infisical 可信及不可信 TLS、重定向拒绝；原测试继续覆盖 Webhook 请求体限制/非法输入/权限、Telegram 通知、OAuth 密钥范围、Infisical 读取/更新/错误脱敏、SSH 主机密钥和真实 Redis 去重并发。使用模拟凭据，未触发生产 Docker 或真实 Gate 密钥更新。
 
 最终执行结果及运行链接在 PR 和 tasklist.md 记录。生产部署兼容性、真实外部服务和 HTTP/2 平台边界仍是独立验收项。PR 等待人工审查；合并且验收完成后再关闭 issue #9。
+
+## Preview 状态补充
+
+PR #10 的 [Vercel 自动评论](https://github.com/C0verSnow/TGBot/pull/10#issuecomment-6346774819)报告 `tgbot1` Preview Ready（提交 8e321e8），同时另一个绑定项目 `tg-bot` 为 Error。Ready 证明该 Preview 已生成，尚不能证明实际 Go 版本。访问 Preview 遇到平台登录保护，使用已连接 Vercel 的受保护 URL 读取工具仍返回 403；本机无 Vercel CLI，因此未完成运行期核对，也未取得另一个项目的错误日志。未修改任何项目的访问控制或生产设置。
