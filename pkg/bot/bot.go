@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -164,12 +165,18 @@ func (a *App) Webhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) Probe(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
 		reply(w, 405, false)
 		return
 	}
 	if !authorized(r.Header.Get("X-TGBot-Probe-Secret"), a.ProbeSecret) {
 		reply(w, 403, false)
+		return
+	}
+	w.Header().Set("X-TGBot-Go-Version", runtime.Version())
+	// Authenticated runtime inspection must not join the tailnet or execute SSH.
+	if r.Method == http.MethodGet {
+		reply(w, 200, true)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 48*time.Second)

@@ -10,6 +10,7 @@ jobs:
     timeout-minutes: 15
     environment: production
     env:
+      GOTOOLCHAIN: local
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
@@ -22,6 +23,11 @@ jobs:
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
         with:
           go-version-file: go.mod
+      - name: Verify actual release toolchain and modules
+        run: |
+          go version
+          test "$(go env GOVERSION)" = "go$(awk '/^go / {print $2}' go.mod)"
+          go mod verify
       - name: Test before release
         run: |
           go test -race -timeout 3m ./...
@@ -49,6 +55,7 @@ jobs:
     timeout-minutes: 20
     environment: production
     env:
+      GOTOOLCHAIN: local
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
@@ -58,6 +65,11 @@ jobs:
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
         with:
           go-version-file: go.mod
+      - name: Verify actual release toolchain and modules
+        run: |
+          go version
+          test "$(go env GOVERSION)" = "go$(awk '/^go / {print $2}' go.mod)"
+          go mod verify
       - name: Check Go before preview
         run: go test -race -timeout 3m ./...
       - name: Install reviewed CLI
